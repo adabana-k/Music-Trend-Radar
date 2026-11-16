@@ -1,0 +1,209 @@
+openapi: 3.0.3
+info:
+  title: Music Trend Radar API — ListenBrainz
+  version: 0.2.0
+  description: Weekly sitewide listen-count trend analysis for ListenBrainz; not a global streaming-market estimate.
+servers:
+  - url: http://localhost:8000
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        '200':
+          description: Health state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [ok, degraded]}
+  /api/v1/sources:
+    get:
+      operationId: listSources
+      responses:
+        '200':
+          description: Available data providers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sources]
+                properties:
+                  sources:
+                    type: array
+                    items: {$ref: '#/components/schemas/Source'}
+  /api/v1/tracks/trending:
+    get:
+      operationId: listTrendingTracks
+      parameters:
+        - {name: sort, in: query, schema: {type: string, enum: [popular, rising, new_entries], default: popular}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        '200':
+          description: Weekly ranking
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TrackRankingResponse'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/tracks/{id}:
+    get:
+      operationId: getTrack
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Track detail
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TrackDetail'}
+        '404': {description: Not found}
+  /api/v1/artists/trending:
+    get:
+      operationId: listTrendingArtists
+      parameters:
+        - {name: sort, in: query, schema: {type: string, enum: [popular, rising], default: popular}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Weekly artist ranking
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ArtistRankingResponse'}
+  /api/v1/insights:
+    post:
+      operationId: createInsight
+      description: Summarize permitted aggregated metrics only; never raw user listens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recording_key]
+              properties:
+                recording_key: {type: string}
+      responses:
+        '200':
+          description: Grounded explanation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Insight'}
+        '403': {description: LLM use not permitted}
+components:
+  schemas:
+    Source:
+      type: object
+      required: [source_id, scope, description]
+      properties:
+        source_id: {type: string, example: listenbrainz}
+        scope: {type: string, example: listenbrainz_sitewide}
+        description: {type: string}
+    PeriodMetadata:
+      type: object
+      required: [source_id, scope, period_start, period_end, source_updated_at, fetched_at, status, coverage_note]
+      properties:
+        source_id: {type: string, example: listenbrainz}
+        scope: {type: string, example: listenbrainz_sitewide}
+        period_start: {type: string, format: date-time}
+        period_end: {type: string, format: date-time}
+        source_updated_at: {type: string, format: date-time}
+        fetched_at: {type: string, format: date-time}
+        status: {type: string, enum: [complete, partial, stale]}
+        coverage_note: {type: string}
+    Track:
+      type: object
+      required: [recording_key, title, artist_name, listen_count, identity_status, coverage_status]
+      properties:
+        recording_key: {type: string}
+        recording_mbid: {type: string, nullable: true}
+        title: {type: string}
+        artist_name: {type: string}
+        listen_count: {type: integer, minimum: 0}
+        previous_listen_count: {type: integer, minimum: 0, nullable: true}
+        rank: {type: integer, minimum: 1, nullable: true}
+        delta: {type: integer, nullable: true}
+        growth_rate: {type: number, nullable: true}
+        trend_score: {type: number, minimum: 0, maximum: 100, nullable: true}
+        identity_status: {type: string, enum: [resolved, unresolved, ambiguous]}
+        coverage_status: {type: string, enum: [comparable, new_or_outside_top_n, incomplete, period_mismatch, identity_ambiguous]}
+    Artist:
+      type: object
+      required: [artist_key, artist_name, listen_count, identity_status, coverage_status]
+      properties:
+        artist_key: {type: string}
+        artist_mbid: {type: string, nullable: true}
+        artist_name: {type: string}
+        listen_count: {type: integer, minimum: 0}
+        previous_listen_count: {type: integer, minimum: 0, nullable: true}
+        growth_rate: {type: number, nullable: true}
+        trend_score: {type: number, nullable: true}
+        identity_status: {type: string, enum: [resolved, unresolved, ambiguous]}
+        coverage_status: {type: string, enum: [comparable, new_or_outside_top_n, incomplete, period_mismatch, identity_ambiguous]}
+    TrackRankingResponse:
+      allOf:
+        - $ref: '#/components/schemas/PeriodMetadata'
+        - type: object
+          required: [tracks]
+          properties:
+            tracks:
+              type: array
+              items: {$ref: '#/components/schemas/Track'}
+    ArtistRankingResponse:
+      allOf:
+        - $ref: '#/components/schemas/PeriodMetadata'
+        - type: object
+          required: [artists]
+          properties:
+            artists:
+              type: array
+              items: {$ref: '#/components/schemas/Artist'}
+    TrackDetail:
+      type: object
+      required: [track, history]
+      properties:
+        track: {$ref: '#/components/schemas/Track'}
+        history:
+          type: array
+          items:
+            type: object
+            required: [period_start, period_end, listen_count]
+            properties:
+              period_start: {type: string, format: date-time}
+              period_end: {type: string, format: date-time}
+              listen_count: {type: integer, minimum: 0}
+    Insight:
+      type: object
+      required: [headline, summary, evidence, caveats]
+      properties:
+        headline: {type: string}
+        summary: {type: string}
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [metric, value, period]
+            properties:
+              metric: {type: string}
+              value: {type: number}
+              period: {type: string}
+        caveats:
+          type: array
+          items: {type: string}
+  responses:
+    Unavailable:
+      description: No usable snapshot
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message]
+                properties:
+                  code: {type: string}
+                  message: {type: string}
