@@ -8,7 +8,7 @@
 ## 2. ユーザーストーリーと機能
 | ID | 要件 | 優先度 | 完了条件 |
 |---|---|---|---|
-| FR-01 | ListenBrainz `sitewide` の人気楽曲・アーティストを定期取得 | MUST | APIから1回取得、レスポンスの期間・更新時刻・取得時刻を記録 |
+| FR-01 | ListenBrainz `sitewide` の人気楽曲・アーティストを定期取得 | MUST | 1論理snapshotに必要な全ページを取得し、レスポンスの期間・更新時刻・取得時刻を記録 |
 | FR-02 | 週間人気楽曲ランキング | MUST | `listen_count` 降順、ソース・期間・更新時刻を表示 |
 | FR-03 | 週間急上昇ランキング | MUST | **比較可能な非重複の確定週**が2期間以上ある場合のみ増加率・差分を表示 |
 | FR-04 | アーティストランキング/詳細 | MUST | アーティストのsitewide統計をそのまま利用。曲の合計を安易に代替しない |
@@ -29,7 +29,7 @@ US-01: 今週のListenBrainz人気上位曲を知る。US-02: 先週と比較し
 - 冪等取込：同じ期間/同じ版のスナップショットの再実行で集計行を重複させない。
 - 本番は認証付き、Secrets不記録。BigQueryクエリ費用・LLM利用回数に上限。
 - DBにない値を補間せず、ランキング対象外を「再生ゼロ」と断定しない。
-- 全集計レスポンスに`source_id`, `period_start`, `period_end`, `source_updated_at`, `fetched_at`, `coverage_note`を含む。
+- 全集計レスポンスに`source_id`, `scope`, `source_range`, 元の`source_from_ts/source_to_ts`, 正規化した`period_start/period_end`, `source_updated_at`, `fetched_at`, `status`, `snapshot_revision`, coverage情報を含む。定義は`contracts/openapi.yaml`を正本とする。
 
 ## 5. 非対象
 Spotify API、音源ファイル取得、全世界/日本のSpotify再生市場推計、勝手な個人プロフィール再構成、ListenBrainzにない新規リスナー指標をsitewide APIから捏造すること、実績未検証の「ヒット確率」の表示。

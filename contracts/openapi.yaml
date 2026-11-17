@@ -103,15 +103,27 @@ components:
         description: {type: string}
     PeriodMetadata:
       type: object
-      required: [source_id, scope, period_start, period_end, source_updated_at, fetched_at, status, coverage_note]
+      required: [source_id, scope, source_range, source_from_ts, source_to_ts, period_start, period_end, source_updated_at, fetched_at, status, snapshot_revision, coverage, coverage_note]
       properties:
         source_id: {type: string, example: listenbrainz}
         scope: {type: string, example: listenbrainz_sitewide}
-        period_start: {type: string, format: date-time}
-        period_end: {type: string, format: date-time}
+        source_range: {type: string, enum: [week, this_week], description: ListenBrainz range argument; this_week is provisional only}
+        source_from_ts: {type: integer, format: int64, description: Original ListenBrainz UTC Unix timestamp}
+        source_to_ts: {type: integer, format: int64, description: Original ListenBrainz UTC Unix timestamp; internal period is normalized as [from,to)}
+        period_start: {type: string, format: date-time, description: UTC start inclusive}
+        period_end: {type: string, format: date-time, description: UTC end exclusive}
         source_updated_at: {type: string, format: date-time}
         fetched_at: {type: string, format: date-time}
-        status: {type: string, enum: [complete, partial, stale]}
+        status: {type: string, enum: [provisional, complete, partial, stale], description: provisional includes this_week or an unconfirmed revision; complete means the local period and two-poll stability checks passed, not an external finality guarantee or full ListenBrainz population coverage}
+        snapshot_revision: {type: string, description: Immutable revision identifier derived from the canonical payload hash}
+        coverage:
+          type: object
+          required: [returned_count, result_limit, pagination_complete]
+          properties:
+            returned_count: {type: integer, minimum: 0, description: Number of ranking rows fetched}
+            result_limit: {type: integer, minimum: 1, maximum: 1000, description: API ranking cutoff used by this snapshot}
+            pagination_complete: {type: boolean, description: Whether all pages available within the configured cutoff were fetched; not a claim of full population coverage}
+            source_reported_total: {type: integer, minimum: 0, nullable: true, description: ListenBrainz total_*_count where present; not a guarantee of full population coverage}
         coverage_note: {type: string}
     Track:
       type: object
@@ -119,16 +131,19 @@ components:
       properties:
         recording_key: {type: string}
         recording_mbid: {type: string, nullable: true}
+        artist_mbids: {type: array, items: {type: string}, description: Optional ListenBrainz artist identifiers; absence or multiplicity does not imply a resolved match}
+        release_mbid: {type: string, nullable: true}
+        release_name: {type: string, nullable: true}
         title: {type: string}
         artist_name: {type: string}
-        listen_count: {type: integer, minimum: 0}
+        listen_count: {type: integer, minimum: 0, description: Number of listens observed by ListenBrainz for this sitewide range}
         previous_listen_count: {type: integer, minimum: 0, nullable: true}
         rank: {type: integer, minimum: 1, nullable: true}
         delta: {type: integer, nullable: true}
         growth_rate: {type: number, nullable: true}
         trend_score: {type: number, minimum: 0, maximum: 100, nullable: true}
         identity_status: {type: string, enum: [resolved, unresolved, ambiguous]}
-        coverage_status: {type: string, enum: [comparable, new_or_outside_top_n, incomplete, period_mismatch, identity_ambiguous]}
+        coverage_status: {type: string, enum: [comparable, new_or_outside_top_n, incomplete, period_mismatch, identity_ambiguous], description: new_or_outside_top_n means absent from the prior retrieved top range, not zero listens}
     Artist:
       type: object
       required: [artist_key, artist_name, listen_count, identity_status, coverage_status]
@@ -141,7 +156,7 @@ components:
         growth_rate: {type: number, nullable: true}
         trend_score: {type: number, nullable: true}
         identity_status: {type: string, enum: [resolved, unresolved, ambiguous]}
-        coverage_status: {type: string, enum: [comparable, new_or_outside_top_n, incomplete, period_mismatch, identity_ambiguous]}
+        coverage_status: {type: string, enum: [comparable, new_or_outside_top_n, incomplete, period_mismatch, identity_ambiguous], description: new_or_outside_top_n means absent from the prior retrieved top range, not zero listens}
     TrackRankingResponse:
       allOf:
         - $ref: '#/components/schemas/PeriodMetadata'
