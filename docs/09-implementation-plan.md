@@ -1,13 +1,14 @@
 # 09 実装計画・バックログ
 
 ## Phase 0 — 契約とfixture
-- P0-01 ListenBrainz sitewide recordings/artistsのレスポンスshape・週の境界・確定時刻を実測検証する。
-- P0-02 ListenBrainzとMusicBrainzのライセンス、表示、API負荷、privacyゲートを記録する。
+- P0-01 完了（仕様確定）: 公式資料と2026-11-17の実測でshape・ページング・期間メタデータを記録。確定時刻/最終性は公式保証がなく、保守的なアプリ内確認規則を採用。
+- P0-02 完了（仕様確定）: ListenBrainzのrate-limit headers/User-Agent、MusicBrainz非商用条件・1rps・ライセンス区分、MBID欠損時の安全策を記録。
 - P0-03 架空の連続2週のサイト全体統計fixtureとエラーケースを作成する。
+- P0-04 取得は`count`/`offset`のページング、同一取得内の期間/更新値検証、同じhashのno-op、期間改訂時の不変revision+原子的置換を満たす。
 
 ## Phase 1 — 垂直スライス
 - P1-01 `apps/web` Next.js + `services/api` FastAPI の基本構築。
-- P1-02 `ListenBrainzSitewideProvider`と`FixtureSitewideProvider`を同じインタフェースで実装。
+- P1-02 `ListenBrainzSitewideProvider`と`FixtureSitewideProvider`を同じインタフェースで実装。`week`が期待する直近完了UTC週と異なる場合はstaleにする。
 - P1-03 JSONスナップショットをGCS保存し、BigQuery raw/stageへ冪等ロード。
 - P1-04 BigQueryの`mart.track_weekly`, `mart.artist_weekly` と人気ランキングSQL。
 - P1-05 `/tracks`・`/artists`画面、出典と期間を表示。

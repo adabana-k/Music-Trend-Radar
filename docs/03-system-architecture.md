@@ -19,9 +19,9 @@ flowchart TD
 ```
 
 ## 2. MVP実行フロー
-1. Schedulerは週次に一度、確定した週の統計を取得（ListenBrainz側の更新タイミングを確認し、遅延を許容）。
-2. 取得した`payload.from_ts`, `to_ts`, `last_updated`, `fetched_at`を検査し、**期間を固定したスナップショット**として保存。未確定/既知期間が変化した場合は版管理。
-3. ListenBrainzの楽曲/アーティスト応答をCloud StorageにJSON保存し、BigQueryに正規化ロード。サイト全体上位Nのみ取り扱う。
+1. Schedulerは週次取得に加え、確定候補を24時間以上離して再確認する。ListenBrainzの公式資料に確定時刻や更新SLAはないので、APIの`range`名だけで確定にしない。
+2. `range=week`で取得し、返却された`from_ts`, `to_ts`, `last_updated`を期待する直近完了UTC週と照合する。期間ずれは`stale`、`last_updated < to_ts`は`provisional`。2回の成功取得で期間・`last_updated`・全ページhashが一致したものだけアプリ内確定扱いにする。`this_week`は暫定のみ。
+3. 録音/アーティストは`count`/`offset`でページングしてGCSにraw保存、BigQueryへ正規化する。アーティスト上位1000件、録音は公式資料にall-time上位1000件の記述があるが期間別上限は明確でないため、両ランキングを部分coverageとして扱う。
 4. MBIDが欠損していてもレコードは保持し、一意識別用のソースキーで追跡。MusicBrainzのlookupはキャッシュし、検証可能なIDだけを補完。
 5. 重複・期間整合性チェック後、BigQueryで前週との変化率・急上昇スコアを計算。前週が存在しない場合はNULL。
 6. FastAPIは事前集計済みマートを参照。Geminiはユーザー要求時のみ集計説明を生成。
@@ -39,4 +39,4 @@ flowchart TD
 - `dev`はfixture中心、`prod`は認証必須・専用権限。Cloud Run、Vertex AI、BigQueryを同一リージョンに可能な範囲で配置し、サービス提供可否を確認。
 
 ## 6. 失敗/回復
-API429/5xx時はRetry-Afterと指数バックオフ、最大試行回数。レスポンス204は空データとして判定。期間不一致/異常な件数はマート更新保留。過去の確定データを残すが、`stale=true`表示。Gemini失敗で通常ランキングは止めない。
+ListenBrainz `429`は`X-RateLimit-Reset-In`等の応答ヘッダーに従い、5xx/ネットワーク失敗は上限付き指数バックオフ+jitter。User-Agentを識別可能にする。204/空応答は成功スナップショットにせず、既存値を維持する。期間不一致、ページ更新競合、上限到達/欠落はmart更新を保留。過去の確定版を残して`stale`と表示する。MusicBrainz補完はIP当たり平均1req/s以下、503は待機して再試行する。Gemini失敗で通常ランキングは止めない。

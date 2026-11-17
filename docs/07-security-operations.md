@@ -4,7 +4,9 @@
 Cloud Run API/取込/MusicBrainz補完を別サービスアカウント、最小IAM、Secret Manager。MVPは認証付き個人利用。APIキーや連携認証情報はWebクライアントへ送らない。MusicBrainzには連絡先を含む明示的User-Agentを付ける。
 
 ## 外部API利用
-ListenBrainzレスポンスヘッダ・レート制限を尊重し、429/503でRetry-After、指数バックオフ + jitter。データ更新時刻が変わらない場合の再ダウンロード削減。MusicBrainzは**1リクエスト/秒以下（送信元IP単位）**とキャッシュ利用。大量のID補完はMusicBrainz DBダンプも比較検討。
+ListenBrainzは識別可能なUser-Agent（アプリ名/版/連絡先）を送り、毎回`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset-In`, `X-RateLimit-Reset`を確認する。`429`はresetヘッダー（`Reset-In`優先）または`Retry-After`まで待機し、5xx/接続失敗は上限付き指数backoff+jitter。固定の許容RPSを仮定しない。`range`ごとの成功payload hashが同じであれば保存/集計をno-opにする。API実装上の公開キャッシュは300秒だが、source update cadenceを示さないため、頻繁なpollingはしない。
+
+MusicBrainzは**平均1リクエスト/秒以下（送信元IP単位）**、意味のあるUser-Agent、503時の遅延再試行、MBID単位のcacheを適用する。メタデータの変更を頻繁にpollしない。非商用API利用が無料であることは、supplementary dataのライセンス条件を無効にしない。
 
 ## 監視
 sitewideの`from_ts,to_ts,last_updated`異常、スナップショット欠落、更新遅延、API429、DBロード重複、LLM根拠不整合、Cloud Run Jobs失敗、課金増加を監視。前回の成功値に切り戻す場合はUIに古さを表示。生の個人情報をログへ記録しない。
